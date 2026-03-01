@@ -181,8 +181,7 @@ function parsePlace(node: GedcomNode): Place | undefined {
 
   const place: Place = { name: plac.value ?? '' };
 
-  const form = findChild(plac, 'FORM');
-  if (form?.value) place.form = form.value;
+  setChild(place, 'form', plac, 'FORM');
 
   const fone = findChildren(plac, 'FONE');
   if (fone.length > 0) {
@@ -246,17 +245,10 @@ function parseAddress(node: GedcomNode): Address | undefined {
   const result: Address = {};
   if (addr.value) result.full = addr.value;
 
-  const city = findChild(addr, 'CITY');
-  if (city?.value) result.city = city.value;
-
-  const state = findChild(addr, 'STAE');
-  if (state?.value) result.state = state.value;
-
-  const post = findChild(addr, 'POST');
-  if (post?.value) result.postalCode = post.value;
-
-  const country = findChild(addr, 'CTRY');
-  if (country?.value) result.country = country.value;
+  setChild(result, 'city', addr, 'CITY');
+  setChild(result, 'state', addr, 'STAE');
+  setChild(result, 'postalCode', addr, 'POST');
+  setChild(result, 'country', addr, 'CTRY');
 
   // Phone/email/fax/www are siblings of ADDR, not children
   const phones = findChildren(node, 'PHON').map(p => p.value ?? '').filter(Boolean);
@@ -311,16 +303,13 @@ function parseSourceCitations(node: GedcomNode): SourceCitation[] {
   return findChildren(node, 'SOUR').filter(s => s.value?.startsWith('@')).map(s => {
     const cit: SourceCitation = { source: s.value! };
 
-    const page = findChild(s, 'PAGE');
-    if (page?.value) cit.page = page.value;
+    setChild(cit, 'page', s, 'PAGE');
 
     const data = findChild(s, 'DATA');
     if (data) {
       cit.data = {};
-      const date = findChild(data, 'DATE');
-      if (date?.value) cit.data.date = parseDate(date.value);
-      const text = findChild(data, 'TEXT');
-      if (text?.value) cit.data.text = text.value;
+      setChild(cit.data, 'date', data, 'DATE', parseDate);
+      setChild(cit.data, 'text', data, 'TEXT');
     }
 
     const quay = findChild(s, 'QUAY');
@@ -350,8 +339,7 @@ function parseChangeDate(node: GedcomNode): ChangeDate | undefined {
   if (!date) return undefined;
 
   const result: ChangeDate = { date };
-  const time = findChild(dateNode, 'TIME');
-  if (time?.value) result.time = time.value;
+  setChild(result, 'time', dateNode, 'TIME');
 
   const notes = parseNoteRefs(chan);
   if (notes.length > 0) result.notes = notes;
@@ -377,16 +365,48 @@ function parseRestriction(value: string | undefined): Restriction | undefined {
   return undefined;
 }
 
+function setChild<T, K extends keyof T>(
+  obj: T,
+  field: K,
+  parent: GedcomNode,
+  tag: string,
+  transform?: (value: string) => T[K],
+): void {
+  const child = findChild(parent, tag);
+  if (child?.value) {
+    obj[field] = transform ? transform(child.value) : child.value as T[K];
+  }
+}
+
+function setChildNode<T, K extends keyof T>(
+  obj: T,
+  field: K,
+  parent: GedcomNode,
+  tag: string,
+  transform: (node: GedcomNode) => T[K],
+): void {
+  const child = findChild(parent, tag);
+  if (child) obj[field] = transform(child);
+}
+
+function setChildNodes<T, K extends keyof T>(
+  obj: T,
+  field: K,
+  parent: GedcomNode,
+  tag: string,
+  transform: (nodes: GedcomNode[]) => T[K],
+): void {
+  const children = findChildren(parent, tag);
+  if (children.length > 0) obj[field] = transform(children);
+}
+
 function parseEvent(node: GedcomNode): EventOrAttribute {
   const evt: EventOrAttribute = {};
 
   if (node.value && node.value !== 'Y') evt.value = node.value;
 
-  const type = findChild(node, 'TYPE');
-  if (type?.value) evt.type = type.value;
-
-  const dateNode = findChild(node, 'DATE');
-  if (dateNode?.value) evt.date = parseDate(dateNode.value);
+  setChild(evt, 'type', node, 'TYPE');
+  setChild(evt, 'date', node, 'DATE', parseDate);
 
   const place = parsePlace(node);
   if (place) evt.place = place;
@@ -394,17 +414,10 @@ function parseEvent(node: GedcomNode): EventOrAttribute {
   const address = parseAddress(node);
   if (address) evt.address = address;
 
-  const agnc = findChild(node, 'AGNC');
-  if (agnc?.value) evt.agency = agnc.value;
-
-  const reli = findChild(node, 'RELI');
-  if (reli?.value) evt.religion = reli.value;
-
-  const caus = findChild(node, 'CAUS');
-  if (caus?.value) evt.cause = caus.value;
-
-  const resn = findChild(node, 'RESN');
-  if (resn?.value) evt.restriction = parseRestriction(resn.value);
+  setChild(evt, 'agency', node, 'AGNC');
+  setChild(evt, 'religion', node, 'RELI');
+  setChild(evt, 'cause', node, 'CAUS');
+  setChild(evt, 'restriction', node, 'RESN', parseRestriction);
 
   const notes = parseNoteRefs(node);
   if (notes.length > 0) evt.notes = notes;
@@ -445,11 +458,8 @@ function parseUnknownTags(node: GedcomNode): UnknownTag[] {
 function parseLdsOrdinance(node: GedcomNode): LdsOrdinance {
   const ord: LdsOrdinance = {};
 
-  const dateNode = findChild(node, 'DATE');
-  if (dateNode?.value) ord.date = parseDate(dateNode.value);
-
-  const temp = findChild(node, 'TEMP');
-  if (temp?.value) ord.temple = temp.value;
+  setChild(ord, 'date', node, 'DATE', parseDate);
+  setChild(ord, 'temple', node, 'TEMP');
 
   const place = parsePlace(node);
   if (place) ord.place = place;
@@ -489,23 +499,12 @@ function parsePersonalName(node: GedcomNode): PersonalName {
     name.type = typeMap[type.value.toLowerCase()] ?? 'other';
   }
 
-  const npfx = findChild(node, 'NPFX');
-  if (npfx?.value) name.prefix = npfx.value;
-
-  const givn = findChild(node, 'GIVN');
-  if (givn?.value) name.given = givn.value;
-
-  const nick = findChild(node, 'NICK');
-  if (nick?.value) name.nickname = nick.value;
-
-  const spfx = findChild(node, 'SPFX');
-  if (spfx?.value) name.surnamePrefix = spfx.value;
-
-  const surn = findChild(node, 'SURN');
-  if (surn?.value) name.surname = surn.value;
-
-  const nsfx = findChild(node, 'NSFX');
-  if (nsfx?.value) name.suffix = nsfx.value;
+  setChild(name, 'prefix', node, 'NPFX');
+  setChild(name, 'given', node, 'GIVN');
+  setChild(name, 'nickname', node, 'NICK');
+  setChild(name, 'surnamePrefix', node, 'SPFX');
+  setChild(name, 'surname', node, 'SURN');
+  setChild(name, 'suffix', node, 'NSFX');
 
   const fone = findChildren(node, 'FONE');
   if (fone.length > 0) {
@@ -540,8 +539,7 @@ function parseIndividual(node: GedcomNode): Individual {
     familiesAsSpouse: [],
   };
 
-  const resn = findChild(node, 'RESN');
-  if (resn?.value) indi.restriction = parseRestriction(resn.value);
+  setChild(indi, 'restriction', node, 'RESN', parseRestriction);
 
   // Names
   indi.names = findChildren(node, 'NAME').map(parsePersonalName);
@@ -554,47 +552,44 @@ function parseIndividual(node: GedcomNode): Individual {
   }
 
   // Individual events
-  const parseOptEvent = (tag: string) => { const c = findChild(node, tag); return c ? parseEvent(c) : undefined; };
-  const parseEventArray = (tag: string) => { const cs = findChildren(node, tag); return cs.length > 0 ? cs.map(parseEvent) : undefined; };
-
-  indi.birth = parseOptEvent('BIRT');
-  indi.christening = parseOptEvent('CHR');
-  indi.death = parseOptEvent('DEAT');
-  indi.burial = parseOptEvent('BURI');
-  indi.cremation = parseOptEvent('CREM');
-  indi.adoption = parseOptEvent('ADOP');
-  indi.baptism = parseOptEvent('BAPM');
-  indi.barMitzvah = parseOptEvent('BARM');
-  indi.basMitzvah = parseOptEvent('BASM');
-  indi.blessing = parseOptEvent('BLES');
-  indi.adultChristening = parseOptEvent('CHRA');
-  indi.confirmation = parseOptEvent('CONF');
-  indi.firstCommunion = parseOptEvent('FCOM');
-  indi.naturalization = parseOptEvent('NATU');
-  indi.emigration = parseOptEvent('EMIG');
-  indi.immigration = parseOptEvent('IMMI');
-  indi.probate = parseOptEvent('PROB');
-  indi.will = parseOptEvent('WILL');
-  indi.graduation = parseOptEvent('GRAD');
-  indi.retirement = parseOptEvent('RETI');
-  indi.census = parseEventArray('CENS');
-  indi.events = parseEventArray('EVEN');
+  setChildNode(indi, 'birth', node, 'BIRT', parseEvent);
+  setChildNode(indi, 'christening', node, 'CHR', parseEvent);
+  setChildNode(indi, 'death', node, 'DEAT', parseEvent);
+  setChildNode(indi, 'burial', node, 'BURI', parseEvent);
+  setChildNode(indi, 'cremation', node, 'CREM', parseEvent);
+  setChildNode(indi, 'adoption', node, 'ADOP', parseEvent);
+  setChildNode(indi, 'baptism', node, 'BAPM', parseEvent);
+  setChildNode(indi, 'barMitzvah', node, 'BARM', parseEvent);
+  setChildNode(indi, 'basMitzvah', node, 'BASM', parseEvent);
+  setChildNode(indi, 'blessing', node, 'BLES', parseEvent);
+  setChildNode(indi, 'adultChristening', node, 'CHRA', parseEvent);
+  setChildNode(indi, 'confirmation', node, 'CONF', parseEvent);
+  setChildNode(indi, 'firstCommunion', node, 'FCOM', parseEvent);
+  setChildNode(indi, 'naturalization', node, 'NATU', parseEvent);
+  setChildNode(indi, 'emigration', node, 'EMIG', parseEvent);
+  setChildNode(indi, 'immigration', node, 'IMMI', parseEvent);
+  setChildNode(indi, 'probate', node, 'PROB', parseEvent);
+  setChildNode(indi, 'will', node, 'WILL', parseEvent);
+  setChildNode(indi, 'graduation', node, 'GRAD', parseEvent);
+  setChildNode(indi, 'retirement', node, 'RETI', parseEvent);
+  setChildNodes(indi, 'census', node, 'CENS', cs => cs.map(parseEvent));
+  setChildNodes(indi, 'events', node, 'EVEN', cs => cs.map(parseEvent));
 
   // Individual attributes
-  indi.caste = parseOptEvent('CAST');
-  indi.physicalDescription = parseOptEvent('DSCR');
-  indi.education = parseOptEvent('EDUC');
-  indi.nationalId = parseOptEvent('IDNO');
-  indi.nationality = parseOptEvent('NATI');
-  indi.childrenCount = parseOptEvent('NCHI');
-  indi.marriageCount = parseOptEvent('NMR');
-  indi.occupation = parseOptEvent('OCCU');
-  indi.property = parseOptEvent('PROP');
-  indi.religion = parseOptEvent('RELI');
-  indi.socialSecurityNumber = parseOptEvent('SSN');
-  indi.title = parseOptEvent('TITL');
-  indi.residence = parseEventArray('RESI');
-  indi.facts = parseEventArray('FACT');
+  setChildNode(indi, 'caste', node, 'CAST', parseEvent);
+  setChildNode(indi, 'physicalDescription', node, 'DSCR', parseEvent);
+  setChildNode(indi, 'education', node, 'EDUC', parseEvent);
+  setChildNode(indi, 'nationalId', node, 'IDNO', parseEvent);
+  setChildNode(indi, 'nationality', node, 'NATI', parseEvent);
+  setChildNode(indi, 'childrenCount', node, 'NCHI', parseEvent);
+  setChildNode(indi, 'marriageCount', node, 'NMR', parseEvent);
+  setChildNode(indi, 'occupation', node, 'OCCU', parseEvent);
+  setChildNode(indi, 'property', node, 'PROP', parseEvent);
+  setChildNode(indi, 'religion', node, 'RELI', parseEvent);
+  setChildNode(indi, 'socialSecurityNumber', node, 'SSN', parseEvent);
+  setChildNode(indi, 'title', node, 'TITL', parseEvent);
+  setChildNodes(indi, 'residence', node, 'RESI', cs => cs.map(parseEvent));
+  setChildNodes(indi, 'facts', node, 'FACT', cs => cs.map(parseEvent));
 
   // Family links
   indi.familiesAsChild = findChildren(node, 'FAMC').map(f => {
@@ -621,14 +616,10 @@ function parseIndividual(node: GedcomNode): Individual {
   });
 
   // LDS ordinances
-  const bapl = findChild(node, 'BAPL');
-  if (bapl) indi.ldsBaptism = parseLdsOrdinance(bapl);
-  const conl = findChild(node, 'CONL');
-  if (conl) indi.ldsConfirmation = parseLdsOrdinance(conl);
-  const endl = findChild(node, 'ENDL');
-  if (endl) indi.ldsEndowment = parseLdsOrdinance(endl);
-  const slgc = findChild(node, 'SLGC');
-  if (slgc) indi.ldsSealingToParents = parseLdsOrdinance(slgc);
+  setChildNode(indi, 'ldsBaptism', node, 'BAPL', parseLdsOrdinance);
+  setChildNode(indi, 'ldsConfirmation', node, 'CONL', parseLdsOrdinance);
+  setChildNode(indi, 'ldsEndowment', node, 'ENDL', parseLdsOrdinance);
+  setChildNode(indi, 'ldsSealingToParents', node, 'SLGC', parseLdsOrdinance);
 
   // Submitters
   const subm = findChildren(node, 'SUBM').map(s => s.value ?? '').filter(Boolean);
@@ -664,8 +655,7 @@ function parseIndividual(node: GedcomNode): Individual {
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) indi.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) indi.recordId = rin.value;
+  setChild(indi, 'recordId', node, 'RIN');
 
   indi.changeDate = parseChangeDate(node);
 
@@ -692,39 +682,29 @@ function parseFamily(node: GedcomNode): Family {
     children: [],
   };
 
-  const resn = findChild(node, 'RESN');
-  if (resn?.value) fam.restriction = parseRestriction(resn.value);
-
-  const husb = findChild(node, 'HUSB');
-  if (husb?.value) fam.husband = husb.value;
-
-  const wife = findChild(node, 'WIFE');
-  if (wife?.value) fam.wife = wife.value;
+  setChild(fam, 'restriction', node, 'RESN', parseRestriction);
+  setChild(fam, 'husband', node, 'HUSB');
+  setChild(fam, 'wife', node, 'WIFE');
 
   fam.children = findChildren(node, 'CHIL').map(c => c.value ?? '').filter(Boolean);
 
-  const nchi = findChild(node, 'NCHI');
-  if (nchi?.value) fam.childrenCount = parseInt(nchi.value, 10);
+  setChild(fam, 'childrenCount', node, 'NCHI', v => parseInt(v, 10));
 
   // Family events
-  const parseFamEvent = (tag: string) => { const c = findChild(node, tag); return c ? parseEvent(c) : undefined; };
-  const parseFamEventArray = (tag: string) => { const cs = findChildren(node, tag); return cs.length > 0 ? cs.map(parseEvent) : undefined; };
-
-  fam.annulment = parseFamEvent('ANUL');
-  fam.divorce = parseFamEvent('DIV');
-  fam.divorceFiled = parseFamEvent('DIVF');
-  fam.engagement = parseFamEvent('ENGA');
-  fam.marriage = parseFamEvent('MARR');
-  fam.marriageBanns = parseFamEvent('MARB');
-  fam.marriageContract = parseFamEvent('MARC');
-  fam.marriageLicense = parseFamEvent('MARL');
-  fam.marriageSettlement = parseFamEvent('MARS');
-  fam.census = parseFamEventArray('CENS');
-  fam.events = parseFamEventArray('EVEN');
+  setChildNode(fam, 'annulment', node, 'ANUL', parseEvent);
+  setChildNode(fam, 'divorce', node, 'DIV', parseEvent);
+  setChildNode(fam, 'divorceFiled', node, 'DIVF', parseEvent);
+  setChildNode(fam, 'engagement', node, 'ENGA', parseEvent);
+  setChildNode(fam, 'marriage', node, 'MARR', parseEvent);
+  setChildNode(fam, 'marriageBanns', node, 'MARB', parseEvent);
+  setChildNode(fam, 'marriageContract', node, 'MARC', parseEvent);
+  setChildNode(fam, 'marriageLicense', node, 'MARL', parseEvent);
+  setChildNode(fam, 'marriageSettlement', node, 'MARS', parseEvent);
+  setChildNodes(fam, 'census', node, 'CENS', cs => cs.map(parseEvent));
+  setChildNodes(fam, 'events', node, 'EVEN', cs => cs.map(parseEvent));
 
   // LDS
-  const slgs = findChild(node, 'SLGS');
-  if (slgs) fam.ldsSealingToSpouse = parseLdsOrdinance(slgs);
+  setChildNode(fam, 'ldsSealingToSpouse', node, 'SLGS', parseLdsOrdinance);
 
   // Submitters
   const subm = findChildren(node, 'SUBM').map(s => s.value ?? '').filter(Boolean);
@@ -734,8 +714,7 @@ function parseFamily(node: GedcomNode): Family {
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) fam.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) fam.recordId = rin.value;
+  setChild(fam, 'recordId', node, 'RIN');
 
   fam.changeDate = parseChangeDate(node);
 
@@ -767,33 +746,21 @@ function parseSource(node: GedcomNode): Source {
         const evt: { types: string; date?: GedcomDate; place?: string } = {
           types: e.value ?? '',
         };
-        const date = findChild(e, 'DATE');
-        if (date?.value) evt.date = parseDate(date.value);
-        const plac = findChild(e, 'PLAC');
-        if (plac?.value) evt.place = plac.value;
+        setChild(evt, 'date', e, 'DATE', parseDate);
+        setChild(evt, 'place', e, 'PLAC');
         return evt;
       });
     }
-    const agnc = findChild(dataNode, 'AGNC');
-    if (agnc?.value) src.data.agency = agnc.value;
+    setChild(src.data, 'agency', dataNode, 'AGNC');
     const notes = parseNoteRefs(dataNode);
     if (notes.length > 0) src.data.notes = notes;
   }
 
-  const auth = findChild(node, 'AUTH');
-  if (auth?.value) src.author = auth.value;
-
-  const titl = findChild(node, 'TITL');
-  if (titl?.value) src.title = titl.value;
-
-  const abbr = findChild(node, 'ABBR');
-  if (abbr?.value) src.abbreviation = abbr.value;
-
-  const publ = findChild(node, 'PUBL');
-  if (publ?.value) src.publication = publ.value;
-
-  const text = findChild(node, 'TEXT');
-  if (text?.value) src.text = text.value;
+  setChild(src, 'author', node, 'AUTH');
+  setChild(src, 'title', node, 'TITL');
+  setChild(src, 'abbreviation', node, 'ABBR');
+  setChild(src, 'publication', node, 'PUBL');
+  setChild(src, 'text', node, 'TEXT');
 
   // Repository reference
   const repo = findChild(node, 'REPO');
@@ -815,8 +782,7 @@ function parseSource(node: GedcomNode): Source {
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) src.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) src.recordId = rin.value;
+  setChild(src, 'recordId', node, 'RIN');
 
   src.changeDate = parseChangeDate(node);
 
@@ -846,8 +812,7 @@ function parseRepository(node: GedcomNode): Repository {
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) repo.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) repo.recordId = rin.value;
+  setChild(repo, 'recordId', node, 'RIN');
 
   repo.changeDate = parseChangeDate(node);
 
@@ -869,8 +834,7 @@ function parseNoteRecord(node: GedcomNode): NoteRecord {
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) note.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) note.recordId = rin.value;
+  setChild(note, 'recordId', node, 'RIN');
 
   note.changeDate = parseChangeDate(node);
 
@@ -908,8 +872,7 @@ function parseMultimediaRecord(node: GedcomNode): MultimediaRecord {
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) rec.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) rec.recordId = rin.value;
+  setChild(rec, 'recordId', node, 'RIN');
 
   rec.changeDate = parseChangeDate(node);
 
@@ -933,14 +896,12 @@ function parseSubmitter(node: GedcomNode): Submitter {
   const langs = findChildren(node, 'LANG').map(l => l.value ?? '').filter(Boolean);
   if (langs.length > 0) subm.languages = langs;
 
-  const rfn = findChild(node, 'RFN');
-  if (rfn?.value) subm.rfn = rfn.value;
+  setChild(subm, 'rfn', node, 'RFN');
 
   const refns = parseReferenceNumbers(node);
   if (refns.length > 0) subm.referenceNumbers = refns;
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) subm.recordId = rin.value;
+  setChild(subm, 'recordId', node, 'RIN');
 
   subm.changeDate = parseChangeDate(node);
 
@@ -956,26 +917,16 @@ function parseSubmitter(node: GedcomNode): Submitter {
 function parseSubmission(node: GedcomNode): Submission {
   const subn: Submission = { xref: node.xref ?? '' };
 
-  const subm = findChild(node, 'SUBM');
-  if (subm?.value) subn.submitter = subm.value;
-
-  const famf = findChild(node, 'FAMF');
-  if (famf?.value) subn.familyFile = famf.value;
-
-  const temp = findChild(node, 'TEMP');
-  if (temp?.value) subn.temple = temp.value;
-
-  const ance = findChild(node, 'ANCE');
-  if (ance?.value) subn.ancestorGenerations = parseInt(ance.value, 10);
-
-  const desc = findChild(node, 'DESC');
-  if (desc?.value) subn.descendantGenerations = parseInt(desc.value, 10);
+  setChild(subn, 'submitter', node, 'SUBM');
+  setChild(subn, 'familyFile', node, 'FAMF');
+  setChild(subn, 'temple', node, 'TEMP');
+  setChild(subn, 'ancestorGenerations', node, 'ANCE', v => parseInt(v, 10));
+  setChild(subn, 'descendantGenerations', node, 'DESC', v => parseInt(v, 10));
 
   const ordi = findChild(node, 'ORDI');
   if (ordi?.value) subn.ordinanceProcessFlag = ordi.value.toLowerCase() === 'yes' ? 'yes' : 'no';
 
-  const rin = findChild(node, 'RIN');
-  if (rin?.value) subn.recordId = rin.value;
+  setChild(subn, 'recordId', node, 'RIN');
 
   const notes = parseNoteRefs(node);
   if (notes.length > 0) subn.notes = notes;
@@ -1004,11 +955,8 @@ function parseHeader(node: GedcomNode): Header {
   };
 
   if (sourNode) {
-    const vers = findChild(sourNode, 'VERS');
-    if (vers?.value) header.sourceSystem.version = vers.value;
-
-    const name = findChild(sourNode, 'NAME');
-    if (name?.value) header.sourceSystem.name = name.value;
+    setChild(header.sourceSystem, 'version', sourNode, 'VERS');
+    setChild(header.sourceSystem, 'name', sourNode, 'NAME');
 
     const corp = findChild(sourNode, 'CORP');
     if (corp?.value) {
@@ -1020,58 +968,43 @@ function parseHeader(node: GedcomNode): Header {
     const data = findChild(sourNode, 'DATA');
     if (data?.value) {
       header.sourceSystem.data = { name: data.value };
-      const date = findChild(data, 'DATE');
-      if (date?.value) header.sourceSystem.data.date = parseDate(date.value);
-      const copr = findChild(data, 'COPR');
-      if (copr?.value) header.sourceSystem.data.copyright = copr.value;
+      setChild(header.sourceSystem.data, 'date', data, 'DATE', parseDate);
+      setChild(header.sourceSystem.data, 'copyright', data, 'COPR');
     }
   }
 
-  const dest = findChild(node, 'DEST');
-  if (dest?.value) header.destination = dest.value;
+  setChild(header, 'destination', node, 'DEST');
 
   const dateNode = findChild(node, 'DATE');
   if (dateNode?.value) {
     header.transmissionDate = parseDate(dateNode.value);
-    const time = findChild(dateNode, 'TIME');
-    if (time?.value) header.transmissionTime = time.value;
+    setChild(header, 'transmissionTime', dateNode, 'TIME');
   }
 
-  const subn = findChild(node, 'SUBN');
-  if (subn?.value) header.submission = subn.value;
-
-  const file = findChild(node, 'FILE');
-  if (file?.value) header.file = file.value;
-
-  const copr = findChild(node, 'COPR');
-  if (copr?.value) header.copyright = copr.value;
+  setChild(header, 'submission', node, 'SUBN');
+  setChild(header, 'file', node, 'FILE');
+  setChild(header, 'copyright', node, 'COPR');
 
   const gedc = findChild(node, 'GEDC');
   if (gedc) {
-    const vers = findChild(gedc, 'VERS');
-    if (vers?.value) header.gedcom.version = vers.value;
-    const form = findChild(gedc, 'FORM');
-    if (form?.value) header.gedcom.form = form.value;
+    setChild(header.gedcom, 'version', gedc, 'VERS');
+    setChild(header.gedcom, 'form', gedc, 'FORM');
   }
 
   const charNode = findChild(node, 'CHAR');
   if (charNode) {
     header.charset.name = charNode.value ?? 'UTF-8';
-    const vers = findChild(charNode, 'VERS');
-    if (vers?.value) header.charset.version = vers.value;
+    setChild(header.charset, 'version', charNode, 'VERS');
   }
 
-  const lang = findChild(node, 'LANG');
-  if (lang?.value) header.language = lang.value;
+  setChild(header, 'language', node, 'LANG');
 
   const plac = findChild(node, 'PLAC');
   if (plac) {
-    const form = findChild(plac, 'FORM');
-    if (form?.value) header.placeForm = form.value;
+    setChild(header, 'placeForm', plac, 'FORM');
   }
 
-  const note = findChild(node, 'NOTE');
-  if (note?.value) header.note = note.value;
+  setChild(header, 'note', node, 'NOTE');
 
   return header;
 }
