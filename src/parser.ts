@@ -293,7 +293,8 @@ function parseMultimediaRefs(node: GedcomNode): MultimediaRef[] {
         file: f.value ?? '',
         format: findChild(f, 'FORM')?.value ?? '',
       };
-      const medi = findChild(findChild(f, 'FORM')!, 'MEDI');
+      const formNode = findChild(f, 'FORM');
+      const medi = formNode ? findChild(formNode, 'MEDI') : undefined;
       if (medi?.value) file.mediaType = medi.value;
       const titl = findChild(f, 'TITL');
       if (titl?.value) file.title = titl.value;
